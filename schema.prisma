@@ -1,0 +1,663 @@
+// O Grimório do Mestre — esquema revisado v0.2
+// Prisma ORM + PostgreSQL. Sem migração aplicada.
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum CampaignRole {
+  GM
+  PLAYER
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum SessionStatus {
+  DRAFT
+  PREPARED
+  LIVE
+  PAUSED
+  ENDED
+}
+
+enum MapStatus {
+  DRAFT
+  PREPARED
+  PUBLISHED
+}
+
+enum ChannelKind {
+  PUBLIC
+  GM_WHISPER
+  SYSTEM
+}
+
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RollMode {
+  DIGITAL
+  PHYSICAL
+}
+
+enum Visibility {
+  GM_PRIVATE
+  CAMPAIGN
+  PERSONAL
+  SELECTED
+}
+
+enum ItemSource {
+  TEMPLATE
+  MANUAL
+}
+
+enum InventoryItemKind {
+  WEAPON
+  ARMOR
+  GEAR
+  DOCUMENT
+  CONSUMABLE
+  TREASURE
+}
+
+enum EquipmentSlot {
+  HEAD
+  CHEST
+  HANDS
+  FEET
+  CLOAK
+  NECK
+  RING_LEFT
+  RING_RIGHT
+  MAIN_HAND
+  OFF_HAND
+  TWO_HANDS
+  BACKPACK
+  PRIMARY_MAIN
+  PRIMARY_OFF
+  PRIMARY_TWO_HANDS
+  SECONDARY_MAIN
+  SECONDARY_OFF
+  SECONDARY_TWO_HANDS
+}
+
+model User {
+  id            String @id @default(uuid()) @db.Uuid
+  username      String @unique @db.VarChar(64)
+  passwordHash  String
+  status        UserStatus @default(ACTIVE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  ownedCampaigns Campaign[] @relation("CampaignOwner")
+  memberships   CampaignMember[]
+  characters    Character[] @relation("CharacterOwner")
+  uploads       Asset[] @relation("AssetUploader")
+  sessions      SessionEvent[] @relation("EventActor")
+  messages      ChatMessage[]
+  notifications Notification[]
+  auditEvents   AuditEvent[]
+  publications  NarrativePublication[]
+  journalEntries JournalEntry[]
+  investigationCards InvestigationCard[]
+  rolls         DiceRoll[]
+  proposals     ActionProposal[]
+  @@map("users")
+}
+
+model Campaign {
+  id          String @id @default(uuid()) @db.Uuid
+  name        String @db.VarChar(160)
+  description String? @db.Text
+  status      CampaignStatus @default(DRAFT)
+  ownerId     String @db.Uuid
+  owner       User @relation("CampaignOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     CampaignMember[]
+  characters  Character[]
+  itemTemplates ItemTemplate[]
+  assets      Asset[]
+  sessions    Session[]
+  maps        GameMap[]
+  channels    ChatChannel[]
+  narrativeNodes NarrativeNode[]
+  publications NarrativePublication[]
+  journalEntries JournalEntry[]
+  investigationCards InvestigationCard[]
+  notifications Notification[]
+  auditEvents AuditEvent[]
+  @@index([ownerId])
+  @@map("campaigns")
+}
+
+model CampaignMember {
+  id         String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  userId     String @db.Uuid
+  role       CampaignRole @default(PLAYER)
+  isActive   Boolean @default(true)
+  joinedAt   DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User @relation(fields: [userId], references: [id])
+  publications PublicationRecipient[]
+  sessionParticipants SessionParticipant[]
+  mapGrants MapAccessGrant[]
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@map("campaign_members")
+}
+
+model Character {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  ownerUserId String? @db.Uuid
+  name        String @db.VarChar(120)
+  species     String?
+  className   String?
+  background  String?
+  level       Int @default(1)
+  baseStats   Json @default("{}")
+  overrides   Json @default("{}")
+  profileImageAssetId String? @db.Uuid
+  equipmentImageAssetId String? @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  owner       User? @relation("CharacterOwner", fields: [ownerUserId], references: [id])
+  profileImage Asset? @relation("CharacterProfileImage", fields: [profileImageAssetId], references: [id])
+  equipmentImage Asset? @relation("CharacterEquipmentImage", fields: [equipmentImageAssetId], references: [id])
+  features    CharacterFeature[]
+  resources   CharacterResource[]
+  items       ItemInstance[]
+  tokens      Token[]
+  @@index([campaignId, ownerUserId])
+  @@index([ownerUserId])
+  @@index([profileImageAssetId])
+  @@index([equipmentImageAssetId])
+  @@map("characters")
+}
+
+model CharacterFeature {
+  id          String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  name        String
+  description String? @db.Text
+  source      String?
+  uses        Int?
+  maxUses     Int?
+  sortOrder   Int @default(0)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  @@index([characterId, sortOrder])
+  @@index([characterId, name])
+  @@map("character_features")
+}
+
+model CharacterResource {
+  id          String @id @default(uuid()) @db.Uuid
+  characterId String @db.Uuid
+  kind        String
+  current     Int
+  maximum     Int
+  recoveryRule Json?
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  @@index([characterId])
+  @@map("character_resources")
+}
+
+model Asset {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  uploadedById String @db.Uuid
+  storageKey  String @unique
+  mimeType    String
+  sizeBytes   BigInt
+  checksum    String
+  originalName String?
+  data        Bytes?
+  createdAt   DateTime @default(now())
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  uploadedBy  User @relation("AssetUploader", fields: [uploadedById], references: [id])
+  itemImages  ItemTemplate[]
+  instanceImages ItemInstance[] @relation("ItemInstanceImage")
+  attachments ItemAttachment[]
+  mapVersions MapVersion[]
+  profileCharacters Character[] @relation("CharacterProfileImage")
+  equipmentCharacters Character[] @relation("CharacterEquipmentImage")
+  @@index([campaignId])
+  @@map("assets")
+}
+
+model ItemTemplate {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  name        String
+  description String? @db.Text
+  rarity      String?
+  kind        InventoryItemKind @default(GEAR)
+  imageAssetId String? @db.Uuid
+  effectsConfig Json?
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  image       Asset? @relation(fields: [imageAssetId], references: [id])
+  instances   ItemInstance[]
+  attachments ItemAttachment[]
+  @@index([campaignId])
+  @@map("item_templates")
+}
+
+model ItemInstance {
+  id          String @id @default(uuid()) @db.Uuid
+  templateId  String? @db.Uuid
+  ownerCharacterId String @db.Uuid
+  source      ItemSource @default(TEMPLATE)
+  customName  String?
+  quantity    Int @default(1)
+  equipped    Boolean @default(false)
+  equippedSlot EquipmentSlot?
+  imageAssetId String? @db.Uuid
+  customData  Json?
+  template    ItemTemplate? @relation(fields: [templateId], references: [id])
+  image       Asset? @relation("ItemInstanceImage", fields: [imageAssetId], references: [id])
+  owner       Character @relation(fields: [ownerCharacterId], references: [id])
+  attachments ItemAttachment[]
+  @@index([ownerCharacterId])
+  @@index([templateId])
+  @@index([imageAssetId])
+  @@map("item_instances")
+}
+
+model ItemAttachment {
+  id          String @id @default(uuid()) @db.Uuid
+  itemTemplateId String? @db.Uuid
+  itemInstanceId String? @db.Uuid
+  assetId     String @db.Uuid
+  title       String
+  visibility  Visibility @default(GM_PRIVATE)
+  template    ItemTemplate? @relation(fields: [itemTemplateId], references: [id])
+  instance    ItemInstance? @relation(fields: [itemInstanceId], references: [id])
+  asset       Asset @relation(fields: [assetId], references: [id])
+  @@index([itemTemplateId])
+  @@index([itemInstanceId])
+  @@index([assetId])
+  @@map("item_attachments")
+}
+
+model Session {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  title       String?
+  status      SessionStatus @default(DRAFT)
+  startedAt   DateTime?
+  pausedAt    DateTime?
+  endedAt     DateTime?
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  events      SessionEvent[]
+  participants SessionParticipant[]
+  tokens      Token[]
+  fogMasks    FogMask[]
+  encounters  Encounter[]
+  rolls       DiceRoll[]
+  @@index([campaignId, status])
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  memberId    String @db.Uuid
+  joinedAt    DateTime @default(now())
+  leftAt      DateTime?
+  session     Session @relation(fields: [sessionId], references: [id])
+  member      CampaignMember @relation(fields: [memberId], references: [id])
+  @@unique([sessionId, memberId])
+  @@map("session_participants")
+}
+
+model SessionEvent {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  actorUserId String? @db.Uuid
+  eventType   String
+  payload     Json
+  idempotencyKey String @unique
+  createdAt   DateTime @default(now())
+  session     Session @relation(fields: [sessionId], references: [id])
+  actor       User? @relation("EventActor", fields: [actorUserId], references: [id])
+  @@index([sessionId, createdAt])
+  @@map("session_events")
+}
+
+model GameMap {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  name        String
+  status      MapStatus @default(DRAFT)
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  versions    MapVersion[]
+  tokens      Token[]
+  accessGrants MapAccessGrant[]
+  @@index([campaignId, status])
+  @@map("game_maps")
+}
+
+model MapVersion {
+  id          String @id @default(uuid()) @db.Uuid
+  mapId       String @db.Uuid
+  versionNumber Int
+  imageAssetId String? @db.Uuid
+  gridConfig  Json
+  layerData   Json?
+  publishedAt DateTime?
+  map         GameMap @relation(fields: [mapId], references: [id])
+  image       Asset? @relation(fields: [imageAssetId], references: [id])
+  fogMasks    FogMask[]
+  layers      MapLayer[]
+  @@unique([mapId, versionNumber])
+  @@map("map_versions")
+}
+
+model Token {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  mapId       String @db.Uuid
+  characterId String? @db.Uuid
+  position    Json
+  size        Float @default(1)
+  visibleToPlayers Boolean @default(true)
+  state       Json?
+  session     Session @relation(fields: [sessionId], references: [id])
+  map         GameMap @relation(fields: [mapId], references: [id])
+  character   Character? @relation(fields: [characterId], references: [id])
+  @@index([sessionId, mapId])
+  @@map("tokens")
+}
+
+model FogMask {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  mapVersionId String @db.Uuid
+  maskData    Json
+  revision    Int @default(0)
+  session     Session @relation(fields: [sessionId], references: [id])
+  mapVersion  MapVersion @relation(fields: [mapVersionId], references: [id])
+  @@unique([sessionId, mapVersionId])
+  @@map("fog_masks")
+}
+
+model Encounter {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  round       Int @default(1)
+  status      String @default("PREPARING")
+  initiativeOrder Json @default("[]")
+  session     Session @relation(fields: [sessionId], references: [id])
+  combatants  Combatant[]
+  proposals   ActionProposal[]
+  @@index([sessionId])
+  @@map("encounters")
+}
+
+model Combatant {
+  id          String @id @default(uuid()) @db.Uuid
+  encounterId String @db.Uuid
+  displayName String
+  sourceRef   Json?
+  hpCurrent   Int
+  initiative  Int?
+  conditions  Json @default("[]")
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  @@index([encounterId])
+  @@map("combatants")
+}
+
+model ActionProposal {
+  id          String @id @default(uuid()) @db.Uuid
+  encounterId String @db.Uuid
+  actorUserId String @db.Uuid
+  payload     Json
+  status      ProposalStatus @default(PENDING)
+  idempotencyKey String @unique
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  actor       User @relation(fields: [actorUserId], references: [id])
+  @@index([encounterId, status])
+  @@index([actorUserId, createdAt])
+  @@map("action_proposals")
+}
+
+model DiceRoll {
+  id          String @id @default(uuid()) @db.Uuid
+  sessionId   String @db.Uuid
+  actorUserId String @db.Uuid
+  expression  String
+  result      Json
+  mode        RollMode
+  visibility  Visibility @default(CAMPAIGN)
+  createdAt   DateTime @default(now())
+  session     Session @relation(fields: [sessionId], references: [id])
+  actor       User @relation(fields: [actorUserId], references: [id])
+  @@index([sessionId, createdAt])
+  @@map("dice_rolls")
+}
+
+model NarrativeNode {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  kind        String
+  title       String
+  body        String? @db.Text
+  visibility  Visibility @default(GM_PRIVATE)
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  outgoing    NarrativeEdge[] @relation("EdgeFrom")
+  incoming    NarrativeEdge[] @relation("EdgeTo")
+  publications NarrativePublication[]
+  @@index([campaignId, kind])
+  @@map("narrative_nodes")
+}
+
+model NarrativeEdge {
+  id          String @id @default(uuid()) @db.Uuid
+  fromNodeId  String @db.Uuid
+  toNodeId    String @db.Uuid
+  label       String?
+  relationType String
+  visibility  Visibility @default(GM_PRIVATE)
+  fromNode    NarrativeNode @relation("EdgeFrom", fields: [fromNodeId], references: [id])
+  toNode      NarrativeNode @relation("EdgeTo", fields: [toNodeId], references: [id])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("narrative_edges")
+}
+
+model NarrativePublication {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  nodeId      String @db.Uuid
+  publishedById String @db.Uuid
+  publishedAt DateTime @default(now())
+  revokedAt   DateTime?
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  node        NarrativeNode @relation(fields: [nodeId], references: [id])
+  publishedBy User @relation(fields: [publishedById], references: [id])
+  recipients  PublicationRecipient[]
+  @@index([campaignId])
+  @@map("narrative_publications")
+}
+
+model PublicationRecipient {
+  id          String @id @default(uuid()) @db.Uuid
+  publicationId String @db.Uuid
+  memberId    String @db.Uuid
+  publication NarrativePublication @relation(fields: [publicationId], references: [id])
+  member      CampaignMember @relation(fields: [memberId], references: [id])
+  @@unique([publicationId, memberId])
+  @@map("publication_recipients")
+}
+
+model JournalEntry {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  authorUserId String @db.Uuid
+  title       String
+  richText    Json
+  visibility  Visibility @default(CAMPAIGN)
+  revision    Int @default(1)
+  createdAt   DateTime @default(now())
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  author      User @relation(fields: [authorUserId], references: [id])
+  revisions   JournalRevision[]
+  @@index([campaignId, createdAt])
+  @@map("journal_entries")
+}
+
+model JournalRevision {
+  id          String @id @default(uuid()) @db.Uuid
+  entryId     String @db.Uuid
+  revisionNumber Int
+  contentSnapshot Json
+  createdAt   DateTime @default(now())
+  entry       JournalEntry @relation(fields: [entryId], references: [id])
+  @@unique([entryId, revisionNumber])
+  @@map("journal_revisions")
+}
+
+model InvestigationCard {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  createdById String @db.Uuid
+  kind        String
+  title       String
+  position    Json
+  visibility  Visibility @default(CAMPAIGN)
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  createdBy   User @relation(fields: [createdById], references: [id])
+  outgoing    InvestigationEdge[] @relation("InvestigationFrom")
+  incoming    InvestigationEdge[] @relation("InvestigationTo")
+  @@index([campaignId])
+  @@map("investigation_cards")
+}
+
+model InvestigationEdge {
+  id          String @id @default(uuid()) @db.Uuid
+  fromCardId  String @db.Uuid
+  toCardId    String @db.Uuid
+  label       String?
+  isHypothesis Boolean @default(true)
+  fromCard    InvestigationCard @relation("InvestigationFrom", fields: [fromCardId], references: [id])
+  toCard      InvestigationCard @relation("InvestigationTo", fields: [toCardId], references: [id])
+  @@index([fromCardId])
+  @@index([toCardId])
+  @@map("investigation_edges")
+}
+
+model ChatChannel {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String @db.Uuid
+  kind        ChannelKind
+  participantKey String? // GM_WHISPER: identificador estável do par GM-jogador
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  messages    ChatMessage[]
+  @@index([campaignId, kind])
+  @@unique([campaignId, kind, participantKey])
+  @@map("chat_channels")
+}
+
+model ChatMessage {
+  id          String @id @default(uuid()) @db.Uuid
+  channelId   String @db.Uuid
+  senderUserId String @db.Uuid
+  body        String @db.Text
+  messageType String @default("TEXT")
+  createdAt   DateTime @default(now())
+  channel     ChatChannel @relation(fields: [channelId], references: [id])
+  sender      User @relation(fields: [senderUserId], references: [id])
+  reads       MessageRead[]
+  @@index([channelId, createdAt])
+  @@map("chat_messages")
+}
+
+model MessageRead {
+  id          String @id @default(uuid()) @db.Uuid
+  messageId   String @db.Uuid
+  userId      String @db.Uuid
+  readAt      DateTime @default(now())
+  message     ChatMessage @relation(fields: [messageId], references: [id])
+  @@unique([messageId, userId])
+  @@map("message_reads")
+}
+
+model Notification {
+  id          String @id @default(uuid()) @db.Uuid
+  recipientUserId String @db.Uuid
+  campaignId  String @db.Uuid
+  kind        String
+  payload     Json
+  priority    Int @default(0)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  recipient   User @relation(fields: [recipientUserId], references: [id])
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  @@index([recipientUserId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model AuditEvent {
+  id          String @id @default(uuid()) @db.Uuid
+  campaignId  String? @db.Uuid
+  actorUserId String? @db.Uuid
+  entityType  String
+  entityId    String
+  action      String
+  beforeData  Json?
+  afterData   Json?
+  createdAt   DateTime @default(now())
+  campaign    Campaign? @relation(fields: [campaignId], references: [id])
+  actor       User? @relation(fields: [actorUserId], references: [id])
+  @@index([campaignId, createdAt])
+  @@map("audit_events")
+}
+
+// Camadas versionadas do editor de mapas (terreno, paredes, objetos etc.).
+model MapLayer {
+  id String @id @default(uuid()) @db.Uuid
+  mapVersionId String @db.Uuid
+  kind String
+  zIndex Int @default(0)
+  layerData Json
+  visibility Visibility @default(GM_PRIVATE)
+  mapVersion MapVersion @relation(fields: [mapVersionId], references: [id])
+  @@index([mapVersionId, zIndex])
+  @@map("map_layers")
+}
+
+// Concessão específica de acesso a mapas, além da filiação à campanha.
+model MapAccessGrant {
+  id String @id @default(uuid()) @db.Uuid
+  mapId String @db.Uuid
+  memberId String @db.Uuid
+  canView Boolean @default(false)
+  canMoveOwnToken Boolean @default(false)
+  map GameMap @relation(fields: [mapId], references: [id])
+  member CampaignMember @relation(fields: [memberId], references: [id])
+  @@unique([mapId, memberId])
+  @@map("map_access_grants")
+}
