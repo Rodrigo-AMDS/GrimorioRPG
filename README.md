@@ -2,6 +2,13 @@
 
 Fundação do primeiro módulo: autenticação com nome de usuário e senha, campanhas, jogadores e controle de acesso por campanha.
 
+## Organização do trabalho
+
+- [Instruções para agentes](agents/README.md)
+- [Specs](spec/README.md)
+- [Tasks e convenções de commit](tasks/README.md)
+- [Regras de trabalho do repositório](AGENTS.md)
+
 ## Desenvolvimento local
 
 1. Copie `.env.example` para `.env` e preencha apenas credenciais locais.

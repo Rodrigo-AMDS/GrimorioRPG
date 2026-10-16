@@ -1,0 +1,13 @@
+---
+description: Fluxo obrigatório de specs, tasks e commits deste projeto
+alwaysApply: true
+---
+
+# Fluxo do projeto
+
+- Leia `AGENTS.md` antes de implementar e consulte as specs relacionadas em `spec/`.
+- Abra uma task em `tasks/` para cada entrega. Toda mudança de tela atualiza sua spec correspondente no mesmo commit; mudanças globais atualizam a spec de sistema afetada.
+- Conclua critérios, verificações e atualização de spec antes de marcar a task como concluída.
+- Faça um commit por task, incluindo código, specs e task. Confira o staged diff e exclua `.env`, credenciais, tokens e dados privados.
+- Não execute push sem pedido explícito do usuário.
+- Specs gerais aprovadas continuam em `docs/PRODUCT_SPEC.md` e `docs/FIGMA.md`; conflito exige orientação antes de mudar a decisão.

@@ -20,6 +20,11 @@ Este repositório implementa uma plataforma web de RPG de mesa, com dois papéis
 - Nunca colocar senhas, URLs com credenciais, tokens ou arquivos `.env` no código, logs, commits ou respostas. A credencial Aiven foi exposta numa imagem anterior: usar somente a senha rotacionada via secret local.
 - Criar testes para autorização cruzada entre campanhas, sigilo de arquivos e idempotência de combate. Documentar alterações e comandos executados.
 - Antes de implementar, conferir design no Figma via MCP; se MCP indisponível, pedir acesso ou trabalhar com documentação sem inventar detalhes visuais.
+- Seguir o fluxo de specs e tasks descrito em `AGENTS.md` e detalhado em `tasks/README.md`.
+- Cada alteração solicitada deve ter um arquivo de task ligado às specs afetadas. Ao mudar uma tela, atualizar a spec da tela no mesmo trabalho para refletir o comportamento final.
+- Cada task concluída deve resultar em exatamente um commit próprio, com código, spec e arquivo de task atualizados juntos. Não agrupar tasks independentes no mesmo commit.
+- Não executar `git push` sem pedido explícito. O usuário fará o push depois de revisar os commits locais.
+- Nunca incluir `.env`, credenciais, tokens, dumps do banco ou dados privados em commits. Conferir o conteúdo staged antes de cada commit.
 
 ## Fluxo inicial recomendado
 1. Inspecionar repositório e arquivos existentes; não sobrescrever código sem revisão.
@@ -28,6 +33,14 @@ Este repositório implementa uma plataforma web de RPG de mesa, com dois papéis
 4. Confirmar banco remoto e backup antes de qualquer DDL.
 5. Implementar autenticação, campanhas, memberships e políticas de autorização com testes.
 6. Evoluir em incrementos seguindo `docs/PRODUCT_SPEC.md`.
+
+## Organização de produto e trabalho
+
+- `agents/` define responsabilidades que podem ser assumidas por agentes especializados; cada pessoa/agente deve seguir `AGENTS.md` e não altera o fluxo de aprovação.
+- `spec/` contém a especificação atual. Specs de tela ficam em `spec/screens/`; especificações globais ficam em `spec/system/`; o padrão obrigatório é `spec/templates/screen-spec.md`.
+- `tasks/` contém um arquivo Markdown por entrega, com ID, tela/área, spec relacionada, critérios de aceite, verificações e commit resultante. Veja `tasks/README.md`.
+- `docs/PRODUCT_SPEC.md` e `docs/FIGMA.md` seguem como referências gerais aprovadas. Em caso de conflito entre esses documentos e uma spec específica, não decidir sozinho: registrar o conflito e pedir orientação.
+- Antes de alterar uma tela, criar/atualizar sua task e consultar sua spec. Ao concluir, atualizar a spec para o resultado real, registrar verificações e marcar a task como concluída antes do commit.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
